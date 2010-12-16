@@ -3,10 +3,9 @@ use strict;
 use warnings;
 
 use Mojolicious::Lite;
-use Mojo::JSON;
 use File::Spec;
 
-use constant ROOT => "incomming";
+use constant ROOT => "incoming";
 
 use Data::Dumper;
 
