@@ -1,0 +1,112 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use Mojolicious::Lite;
+use Mojo::JSON;
+use File::Spec;
+
+use constant ROOT => "incomming";
+
+use Data::Dumper;
+
+BEGIN { 
+    $ENV{MOJO_MAX_MESSAGE_SIZE} = 1 * 1024 * 1024 * 1024; # 1 GB 
+};
+
+# Come on, universe, you big, mostly empty wuss! Give me all the juice you got!
+
+app->helper(_flash => sub { shift->flash(@_)->redirect_to('index') });
+
+get '/' => 'index';
+post '/upload' => sub
+{
+    my $self = shift;
+
+    my $upload = $self->req->upload('file')
+        or return $self->_flash(error => 'no file uploaded');
+
+    my $filename = $upload->filename;
+    $filename =~ s/[^a-zA-Z0-9-_\.": ]//g;
+
+    my $to = File::Spec->catfile(ROOT, File::Spec->no_upwards($filename));
+    my $dst = $to; my $i = 0;
+
+    app->log->debug("got $dst");
+
+    while (-e $dst) { $dst = $to.'.'.$i++; app->log->info("trying $dst")};
+
+    $upload->move_to($dst)
+        or return $self->_flash(error => 'could not move file to ' . ROOT);
+
+    app->log->debug("end of upload");
+    return $self->_flash(message => "$dst uploaded successfully");
+} => 'upload';
+
+app->start;
+
+__DATA__
+@@ index.html.ep
+% my $url = $self->req->url->to_abs->scheme( $self->req->is_secure ? 'wss' : 'ws' )->path( '/socket' );
+<!doctype html5>
+<html>
+    <head>
+        <style type="text/css">
+            html {
+                font-size: 1em;
+                color: white;
+                padding: 1em;
+                width: 40%; margin-left: 30%; margin-right: 30%;
+                background-image: -moz-gradient(linear, 0% 0%, 0% 90%, from(rgba(60, 60, 60, 0.7)), to(rgba(200, 200, 200, 0.9)));
+                background-image: -webkit-gradient(linear, 0% 0%, 0% 90%, from(rgba(60, 60, 60, 0.7)), to(rgba(200, 200, 200, 0.9)));
+                background-image: -opera-gradient(linear, 0% 0%, 0% 90%, from(rgba(60, 60, 60, 0.7)), to(rgba(200, 200, 200, 0.9)));
+                background-image: -khtml-gradient(linear, 0% 0%, 0% 90%, from(rgba(60, 60, 60, 0.7)), to(rgba(200, 200, 200, 0.9)));
+                background-image: gradient(linear, 0% 0%, 0% 90%, from(rgba(60, 60, 60, 0.7)), to(rgba(200, 200, 200, 0.9)));
+            }
+            .flash { position: absolute; left: 3%; width: 25%; }
+            #ok { background-color: green; }
+            #error { background-color: red; }
+            div {
+                padding: 1em;
+                -moz-box-shadow:rgba(0,0,0,0.5) 0px 0px 24px;
+                -webkit-box-shadow:rgba(0,0,0,0.5) 0px 0px 24px;
+                -opera-box-shadow:rgba(0,0,0,0.5) 0px 0px 24px;
+                -khtml-box-shadow:rgba(0,0,0,0.5) 0px 0px 24px;
+                box-shadow:rgba(0,0,0,0.5) 0px 0px 24px;
+
+                -moz-border-radius: 2em;
+                -webkit-border-radius: 2em;
+                -opera-border-radius: 2em;
+                -khtml-border-radius: 2em;
+                border-radius: 2em;
+
+                background-color: white;
+
+                background-image: -moz-gradient(linear, 0% 0%, 0% 90%, from(rgba(0, 0, 0, 0.7)), to(rgba(20, 20, 20, 0.9)));
+                background-image: -webkit-gradient(linear, 0% 0%, 0% 90%, from(rgba(0, 0, 0, 0.7)), to(rgba(20, 20, 20, 0.9)));
+                background-image: -opera-gradient(linear, 0% 0%, 0% 90%, from(rgba(0, 0, 0, 0.7)), to(rgba(20, 20, 20, 0.9)));
+                background-image: -khtml-gradient(linear, 0% 0%, 0% 90%, from(rgba(0, 0, 0, 0.7)), to(rgba(20, 20, 20, 0.9)));
+                background-image: gradient(linear, 0% 0%, 0% 90%, from(rgba(0, 0, 0, 0.7)), to(rgba(20, 20, 20, 0.9)));
+            }
+            h1, h2 {
+                text-shadow: rgba(0, 0, 0, 1) .1em .1em .3em;
+            }
+            input { font-size: 1em; }
+
+        </style>
+    </head>
+    <body>
+        <h1>Dropbox:</h1>
+% if (flash 'message') {
+        <div id='ok' class='flash'><%= flash 'message' %></div>
+% } elsif (flash 'error') {
+        <div id='error' class='flash'><%= flash 'error' %></div>
+% }
+        <div id='upload'>
+            <h2>Upload</h2>
+            <form method="post" action="<%= url_for('upload') %>" enctype="multipart/form-data">
+                <input name="file" type="file"><br /><input type="submit">
+            </form>
+        </div>
+    </body>
+</html>
